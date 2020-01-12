@@ -30,6 +30,7 @@ class Chess: public mtb::Board<8,8>{
         Chess(int n=10);
         void put(Pieza *pieza, unsigned r, unsigned c);
         void reset();
+        void move(const std::string);
         void move(unsigned r1, unsigned c1, unsigned r2, unsigned c2);
         std::string getInfo(sf::Vector2i pos);
         bool empty(unsigned r, unsigned c);
