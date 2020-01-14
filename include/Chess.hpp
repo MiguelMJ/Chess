@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 // #include <unordered_set>
+#include <random>
 #include <forward_list>
 
 typedef enum {PEON, TORRE, CABALLO, ALFIL, REY, REINA} TipoPieza;
@@ -26,6 +27,7 @@ typedef struct Movimiento_st{
     Posicion origen;
     Posicion destino;
     std::string to_string();
+    Movimiento_st(const Movimiento_st& m);
     Movimiento_st(const std::string& str);
     Movimiento_st(Posicion o, Posicion d);
     bool validar();
@@ -58,8 +60,8 @@ private:
     std::shared_ptr<std::map<std::string, ListaMovimientos> > cacheMovimientos;
     
     // FUNCIONES AUXILIARES
-    bool insertarSiValido(ListaMovimientos &l, Movimiento m, bool& ha_comido_antes)const;
-    bool insertarSiValido(ListaMovimientos &l, Movimiento m)const;
+    bool insertarSiValido(ListaMovimientos &l, Movimiento m, bool& ha_comido_antes);
+    bool insertarSiValido(ListaMovimientos &l, Movimiento m);
     bool soloProbar(Movimiento m, Equipo e);
     
     // PARA DIBUJAR
@@ -75,38 +77,50 @@ public:
     bool probar(Movimiento m, Equipo e);
     
     void poner(Posicion p, Pieza f);
-    Pieza piezaEn(Posicion p)const;
+    Pieza piezaEn(Posicion p);
     
-    ListaMovimientos posiblesMovimientos (Pieza p)const;
-    ListaMovimientos posiblesMovimientos (Equipo e)const;
+    ListaMovimientos posiblesMovimientos (Pieza p);
+    ListaMovimientos posiblesMovimientos (Equipo e);
     
-    bool jaque(Equipo e)const;
+    bool jaque(Equipo e);
     bool jaquemate(Equipo e);
     
-    std::string getInfo(Posicion p)const;
+    std::string getInfo(Posicion p);
     Posicion coord2pos(sf::Vector2f coo);
     
     void marcar(Posicion p, sf::Color, float thickness=0.1);
     void borrarMarcas();
+    // for debug
+    int cachedAccesses;
+    int calculatedAccesses;
     
 };
 
 class Jugador{
-private:
+protected:
     std::unique_ptr<Movimiento> sigMov;
 public:
     Equipo equipo;
     virtual bool listo()=0;
+    virtual void notificar(Movimiento m)=0;
     Movimiento jugada();
 };
-class JugadorHost : public Jugador{
-    virtual bool listo();
-};
 class JugadorCliente : public Jugador{
+public:
     virtual bool listo();
+    virtual void notificar(Movimiento m);
+    void preparar(Movimiento m);
+};
+class JugadorOnline : public Jugador{
+public:
+    virtual bool listo();
+    virtual void notificar(Movimiento m);
 };
 class JugadorIA : public Jugador{
+public:
+    TableroAjedrez* tablero;
     virtual bool listo();
+    virtual void notificar(Movimiento m);
 };
 
 class Juego{

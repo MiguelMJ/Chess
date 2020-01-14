@@ -101,11 +101,20 @@ int main(int argc, char **argv){
     avisos.setCharacterSize(16);
     
     std::cout << "Iniciando bucle" << std::endl;
-    Equipo turno = BLANCAS;
+    // Equipo turno = BLANCAS;
     Posicion firstClick;
+    
+    JugadorCliente *cliente = new JugadorCliente;
+    cliente->equipo = BLANCAS;
+    auto ia = new JugadorIA;
+    ia->tablero = &board;
+    Jugador *contrincante = ia;
+    contrincante->equipo = NEGRAS;
+    Jugador *turno = cliente;
     while(win.isOpen()){
         // std::cout << ".";
         sf::Event e;
+        // Manejo de eventos
         while(win.pollEvent(e)){
             switch(e.type){
                 case sf::Event::Closed:{
@@ -127,43 +136,68 @@ int main(int argc, char **argv){
                     break;
                 }
                 case sf::Event::MouseButtonPressed:{
-                    auto mousePos = win.mapPixelToCoords(sf::Mouse::getPosition(win));
-                    if(e.mouseButton.button == sf::Mouse::Left){
-                        if(!firstClick.validar()){
-                            Posicion click = board.coord2pos(mousePos);
-                            auto p = board.piezaEn(click);
-                            auto pm = board.posiblesMovimientos(p);
-                            if(p != nullptr && p->equipo == turno){
-                                firstClick.r = click.r; firstClick.c = click.c;
-                                board.marcar(firstClick, sf::Color::Blue);
-                                for(auto m : pm){
-                                    sf::Color c = 
-                                        board.piezaEn(m.destino) == nullptr ?
-                                            sf::Color::White : 
-                                            sf::Color::Red ;
-                                    board.marcar(m.destino, c);
+                    if(turno == cliente){
+                        auto mousePos = win.mapPixelToCoords(sf::Mouse::getPosition(win));
+                        if(e.mouseButton.button == sf::Mouse::Left){
+                            /*
+                             * PRIMER CLICK
+                             */
+                            if(!firstClick.validar()){
+                                Posicion click = board.coord2pos(mousePos);
+                                auto p = board.piezaEn(click);
+                                auto pm = board.posiblesMovimientos(p);
+                                if(p != nullptr && p->equipo == turno->equipo){
+                                    firstClick.r = click.r; firstClick.c = click.c;
+                                    board.marcar(firstClick, sf::Color::Blue);
+                                    for(auto m : pm){
+                                        sf::Color c = 
+                                            board.piezaEn(m.destino) == nullptr ?
+                                                sf::Color::White : 
+                                                sf::Color::Red ;
+                                        board.marcar(m.destino, c);
+                                    }
                                 }
-                            }
-                        }else{
-                            Movimiento m(firstClick, board.coord2pos(mousePos));
-                            if(board.probar(m, turno)){
-                                turno = turno == BLANCAS ? NEGRAS : BLANCAS;
-                                info_turno.setString("TURNO: "+nombreEquipo.at(turno));
+                            /*
+                             * SEGUNDO CLICK
+                             */
                             }else{
-                                l_avisos.avisar("Movimiento no valido");
+                                Movimiento m(firstClick, board.coord2pos(mousePos));
+                                if(board.probar(m, turno->equipo)){
+                                    cliente->preparar(m);
+                                    /*turno = turno == BLANCAS ? NEGRAS : BLANCAS;
+                                    info_turno.setString("TURNO: "+nombreEquipo.at(turno));*/
+                                    
+                                }else{
+                                    l_avisos.avisar("Movimiento no valido");
+                                }
+                                /*if(board.jaque(turno)){
+                                    l_avisos.avisar(nombreEquipo.at(turno) + " EN JAQUE");
+                                }*/
+                                firstClick.r=-1;firstClick.c=-1;
+                                board.borrarMarcas();
                             }
-                            if(board.jaque(turno)){
-                                l_avisos.avisar(nombreEquipo.at(turno) + " EN JAQUE");
-                            }
-                            firstClick.r=-1;firstClick.c=-1;
-                            board.borrarMarcas();
                         }
                     }
                     break;
                 }
             }
         }
+        // fin del manejo de eventos
         
+        if(turno->listo()){
+            Movimiento j(turno->jugada());
+            board.mover(j);
+            turno = turno == cliente ? contrincante : cliente;
+            /*if(board.jaquemate(turno->equipo)){
+                l_avisos.avisar(nombreEquipo.at(turno->equipo)+" HAN PERDIDO");
+            }*/
+            if(board.jaque(turno->equipo)){
+                l_avisos.avisar(nombreEquipo.at(turno->equipo)+" EN JAQUE");
+            }
+            turno->notificar(j);
+        }
+        
+        //
         unsigned dt = clock.restart().asMilliseconds();
         
         avisos.setString(l_avisos.to_string());
@@ -178,6 +212,7 @@ int main(int argc, char **argv){
         win.draw(board);
         win.display();
     }
-    
+    std::cout << "Movimientos calculados: " << board.calculatedAccesses << std::endl;
+    std::cout << "Movimientos recordados: " << board.cachedAccesses << std::endl;
     return 0;
 }

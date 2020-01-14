@@ -24,6 +24,10 @@ Posicion_st::Posicion_st(unsigned rr, unsigned cc){
 bool Posicion_st::validar(){
     return r < 8 && c < 8;
 }
+Movimiento_st::Movimiento_st(const Movimiento_st& m){
+    origen=m.origen;
+    destino=m.destino;
+}
 std::string Movimiento_st::to_string(){
     return origen.to_string() + destino.to_string();
 }
@@ -55,8 +59,7 @@ std::string Pieza_st::to_string(){
 }
 
 Pieza_st::Pieza_st_(TipoPieza t, Equipo e, Posicion p, bool j):
-    posicion(p.r, p.c)
-    {
+    posicion(p.r, p.c){
     tipo = t;
     equipo = e;
     jugando=j;
@@ -92,11 +95,11 @@ Pieza_st::Pieza_st_(TipoPieza t, Equipo e, Posicion p, bool j):
 Evento::Evento_st(Movimiento m, Pieza p):
     movimiento(m),
     comida(p){}
-bool TableroAjedrez::insertarSiValido(ListaMovimientos &l, Movimiento m)const{
+bool TableroAjedrez::insertarSiValido(ListaMovimientos &l, Movimiento m){
     bool dummy=false;
     return insertarSiValido(l, m, dummy);
 }
-bool TableroAjedrez::insertarSiValido(ListaMovimientos &l, Movimiento m, bool& ha_comido_antes)const{
+bool TableroAjedrez::insertarSiValido(ListaMovimientos &l, Movimiento m, bool& ha_comido_antes){
     bool valido = false;
     if(m.validar() && !ha_comido_antes){
         Pieza p = piezaEn(m.origen);
@@ -104,9 +107,9 @@ bool TableroAjedrez::insertarSiValido(ListaMovimientos &l, Movimiento m, bool& h
         bool come = p != nullptr && 
                     d != nullptr && 
                     d->equipo != p->equipo;
-        if(come){
+        /*if(come){
             std::cout << p->to_string() << " come " << d->to_string() << std::endl;
-        }
+        }*/
         valido = p != nullptr && (d == nullptr || come);
         ha_comido_antes = ha_comido_antes || come;
         if(valido){
@@ -153,8 +156,7 @@ void TableroAjedrez::situarSprites(){
 }
 
 TableroAjedrez::TableroAjedrez(int size):
-    cacheMovimientos(new std::map<std::string, ListaMovimientos>)
-    {
+    cacheMovimientos(new std::map<std::string, ListaMovimientos>){
     blancas.push_back(Pieza(new Pieza_st(PEON, BLANCAS, Posicion(1,0))));
     blancas.push_back(Pieza(new Pieza_st(PEON, BLANCAS, Posicion(1,1))));
     blancas.push_back(Pieza(new Pieza_st(PEON, BLANCAS, Posicion(1,2))));
@@ -223,7 +225,7 @@ void TableroAjedrez::mover(Movimiento m){
     p->sprite.move(dx, dy);
     */
     cacheMovimientos->clear();
-    std::cout << "Cache limpiada" << std::endl;
+    // std::cout << "Cache limpiada" << std::endl;
     historial.push_front(e);
 }
 void TableroAjedrez::deshacer(){
@@ -267,12 +269,7 @@ bool TableroAjedrez::probar(Movimiento m, Equipo e){
         auto viejaCache = cacheMovimientos;
         cacheMovimientos.reset(new std::map<std::string, ListaMovimientos>);
         produceJaque = soloProbar(m, e);
-        if(!produceJaque){ 
-            mover(m);
-        }else{
-            cacheMovimientos = viejaCache;
-            std::cout << "cache restituida" << std::endl;
-        }
+        cacheMovimientos = viejaCache;
     }
     return contemplado && !produceJaque;
 }
@@ -285,16 +282,17 @@ void TableroAjedrez::poner(Posicion p, Pieza f){
     }
 }
 
-Pieza TableroAjedrez::piezaEn(Posicion p)const{
+Pieza TableroAjedrez::piezaEn(Posicion p){
     return tablero[p.r][p.c];
 }
 
-ListaMovimientos TableroAjedrez::posiblesMovimientos(Pieza p)const{
+ListaMovimientos TableroAjedrez::posiblesMovimientos(Pieza p){
     ListaMovimientos ret;
     if(p != nullptr){
         Posicion pos = p->posicion;
         auto guardado = cacheMovimientos->find(pos.to_string());
         if( guardado != cacheMovimientos->end()){
+            cachedAccesses = cachedAccesses+1;
             return guardado->second;
         }
         Posicion dest;
@@ -310,25 +308,27 @@ ListaMovimientos TableroAjedrez::posiblesMovimientos(Pieza p)const{
                     start = 6;
                     dr = -1;
                 }
+                // attack
+                dest.r = pos.r + dr;
+                for(dest.c = pos.c-1; dest.c <= pos.c+1; dest.c += 2){
+                    if(dest.validar()){
+                        paux = piezaEn(dest);
+                        if(paux != nullptr && paux->equipo != p->equipo){
+                            ret.push_back(Movimiento(pos, dest));
+                        }
+                    }
+                }
                 // normal move
                 dest.r = pos.r+dr; dest.c = pos.c;
-                if(piezaEn(dest) == nullptr){
+                if(dest.validar() && piezaEn(dest) == nullptr){
                     ret.push_back(Movimiento(pos, dest));
                     // starting move
                     dest.r += dr;
-                    if( pos.r == start && 
+                    if( dest.validar() && pos.r == start && 
                         piezaEn(dest) == nullptr){
                         ret.push_back(Movimiento(pos, dest));
                     }
                     dest.r -= dr;
-                }
-                // attack
-                dest.r = pos.r + dr;
-                for(dest.c = pos.c+1; dest.c < pos.c-1; dest.c -= 2){
-                    paux = piezaEn(dest);
-                    if(paux != nullptr && paux->equipo != p->equipo){
-                        ret.push_back(Movimiento(pos, dest));
-                    }
                 }
                 break;
             case REINA:
@@ -391,21 +391,21 @@ ListaMovimientos TableroAjedrez::posiblesMovimientos(Pieza p)const{
                 }
                 break;
             case CABALLO:
-                dest.r = pos.r+2; dest.c+1;
+                dest.r = pos.r+2; dest.c = pos.c+1;
                 insertarSiValido(ret, Movimiento(pos, dest));
-                dest.r = pos.r+2; dest.c-1;
+                dest.r = pos.r+2; dest.c = pos.c-1;
                 insertarSiValido(ret, Movimiento(pos, dest));
-                dest.r = pos.r-2; dest.c+1;
+                dest.r = pos.r-2; dest.c = pos.c+1;
                 insertarSiValido(ret, Movimiento(pos, dest));
-                dest.r = pos.r-2; dest.c-1;
+                dest.r = pos.r-2; dest.c = pos.c-1;
                 insertarSiValido(ret, Movimiento(pos, dest));
-                dest.r = pos.r+1; dest.c+2;
+                dest.r = pos.r+1; dest.c = pos.c+2;
                 insertarSiValido(ret, Movimiento(pos, dest));
-                dest.r = pos.r+1; dest.c-2;
+                dest.r = pos.r+1; dest.c = pos.c-2;
                 insertarSiValido(ret, Movimiento(pos, dest));
-                dest.r = pos.r-1; dest.c+2;
+                dest.r = pos.r-1; dest.c = pos.c+2;
                 insertarSiValido(ret, Movimiento(pos, dest));
-                dest.r = pos.r-1; dest.c-2;
+                dest.r = pos.r-1; dest.c = pos.c-2;
                 insertarSiValido(ret, Movimiento(pos, dest));
                 break;
             case REY:
@@ -428,12 +428,13 @@ ListaMovimientos TableroAjedrez::posiblesMovimientos(Pieza p)const{
                 break;
         }
         (*cacheMovimientos)[pos.to_string()] = ret;
-        std::cout << "almacenado movimiento desde " << pos.to_string() << std::endl;
+        // std::cout << "almacenado movimiento desde " << pos.to_string() << std::endl;
     }
+    calculatedAccesses++;
     return ret;
 }
 
-ListaMovimientos TableroAjedrez::posiblesMovimientos(Equipo e)const{
+ListaMovimientos TableroAjedrez::posiblesMovimientos(Equipo e){
     const std::vector<Pieza> &equipo = e == BLANCAS ? blancas : negras;
     ListaMovimientos ret;
     for(auto p : equipo){
@@ -445,7 +446,7 @@ ListaMovimientos TableroAjedrez::posiblesMovimientos(Equipo e)const{
     return ret;
 }
 
-bool TableroAjedrez::jaque(Equipo e)const{
+bool TableroAjedrez::jaque(Equipo e){
     bool j = false;
     const std::vector<Pieza> *equipo, *contrincante;
     // determinamos los equipos
@@ -490,7 +491,7 @@ bool TableroAjedrez::jaquemate(Equipo e){
     return jm;
 }
 
-std::string TableroAjedrez::getInfo(Posicion pos)const{
+std::string TableroAjedrez::getInfo(Posicion pos){
     std::string ret;
     if(pos.validar()){
         auto p = piezaEn(pos);
@@ -532,3 +533,30 @@ void TableroAjedrez::marcar(Posicion p, sf::Color c, float thickness){
 void TableroAjedrez::borrarMarcas(){
     marcas.clear();
 }
+
+Movimiento Jugador::jugada(){
+    Movimiento ret(sigMov->origen, sigMov->destino);
+    sigMov = nullptr;
+    return ret;
+};
+
+bool JugadorCliente::listo(){
+    sigMov != nullptr;
+}
+void JugadorCliente::notificar(Movimiento m){}
+void JugadorCliente::preparar(Movimiento m){
+    sigMov.reset(new Movimiento(m.origen,m.destino));
+}
+std::random_device rd;
+bool JugadorIA::listo(){
+    auto pm = tablero->posiblesMovimientos(equipo);
+    auto azar = pm[rd() % pm.size()];
+    sigMov.reset(new Movimiento(azar.origen, azar.destino));
+    return true;
+}
+void JugadorIA::notificar(Movimiento m){}
+
+bool JugadorOnline::listo(){
+    
+}
+void JugadorOnline::notificar(Movimiento m){}
