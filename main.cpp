@@ -1,6 +1,7 @@
 #include <iostream>
 #include <sstream>
-#include <random>
+#include <list>
+#include <string>
 
 #include <SFML/Graphics.hpp>
 #include <SFML/Window.hpp>
@@ -8,12 +9,48 @@
 
 #include "Chess.hpp"
 
-sf::RenderWindow win;
+
+typedef struct{
+    std::string msg;
+    int ms;
+} Aviso;
+typedef struct {
+    std::list<Aviso> lista;
+    void update(int ms){
+        auto i = lista.begin();
+        while(i != lista.end()){
+            i->ms -= ms;
+            if(i->ms < 0){
+                i = lista.erase(i);
+            }else{
+                i++;
+            }
+        }
+    }
+    void avisar(const std::string& str, unsigned m=1000){
+        Aviso a;
+        a.msg = str; a.ms = m;
+        lista.push_back(a);
+    }
+    std::string to_string()const{
+        std::stringstream ss;
+        for(auto a : lista){
+            ss << a.msg << "\n";
+        }
+        return ss.str();
+    }
+} ListaAvisos;
 
 int main(int argc, char **argv){
+    const std::map<Equipo, std::string> nombreEquipo = {
+        {BLANCAS, "BLANCAS"},
+        {NEGRAS, "NEGRAS"}
+    };
     // constants
     const unsigned n = 30;
     // window and view
+    sf::RenderWindow win;
+    std::cout << "Configurando ventana" << std::endl;
     sf::ContextSettings settings;
     settings.antialiasingLevel = 8;
 
@@ -29,27 +66,45 @@ int main(int argc, char **argv){
     
     
     // Pieces
-    mtb::Pieza::tex.loadFromFile("piezas2.png");
-    mtb::Pieza::tex.setSmooth(true);
+    std::cout << "Cargando textura de piezas" << std::endl;
+    if(!Pieza_st::texture.loadFromFile("piezas2.png")){
+        std::cerr << "No se pudo cargar las texturas" << std::endl;
+        exit(1);
+    }
+    Pieza_st::texture.setSmooth(true);
     // Board
-    mtb::Chess board(n);
+    std::cout << "Construyendo tablero" << std::endl;
+    TableroAjedrez board(n);
     // Clock
     sf::Clock clock;
-    sf::Time wait = sf::milliseconds(500);
     // Text
     sf::Font font;
+    std::cout << "Cargando fuentes" << std::endl;
     if(!font.loadFromFile("fonts/GOTHIC.TTF")){
         exit(1);
     }
+    sf::Text info_turno;
+    info_turno.setString("TURNO: BLANCAS");
+    info_turno.setFont(font);
+    info_turno.setPosition(1010,10);
+    info_turno.setCharacterSize(24);
+    
     sf::Text info;
     info.setFont(font);
-    info.setPosition(1010,10);
+    info.setPosition(1010,40);
     info.setCharacterSize(24);
     
-    sf::Vector2i selectedCell(-1, -1);
-    std::vector<sf::Vector2i> possibleMoves;
+    ListaAvisos l_avisos;
+    sf::Text avisos;
+    avisos.setFont(font);
+    avisos.setPosition(1010,750);
+    avisos.setCharacterSize(16);
     
+    std::cout << "Iniciando bucle" << std::endl;
+    Equipo turno = BLANCAS;
+    Posicion firstClick;
     while(win.isOpen()){
+        // std::cout << ".";
         sf::Event e;
         while(win.pollEvent(e)){
             switch(e.type){
@@ -58,52 +113,50 @@ int main(int argc, char **argv){
                     break;
                 }
                 case sf::Event::KeyPressed:{
-                    if(e.key.code == sf::Event::ENTER){
-                        std::string mov;
-                        getline(cin, mov);
-                        int r1 = mov[0] - '0';
-                        int c1 = mov[1] - '0';
-                        int r2 = mov[2] - '0';
-                        int c2 = mov[3] - '0';
-                        auto pm = board.getPossibleMovements(r1,c2);
-                        
+                    if(e.key.code == sf::Keyboard::Enter){
+                        // 
                     }
                     break;
                 }
                 case sf::Event::MouseMoved:{
                     auto mousePos = win.mapPixelToCoords(sf::Mouse::getPosition(win));
-                    info.setString(board.getInfo(board.getCell(mousePos)));
+                    Posicion mp = board.coord2pos(mousePos);
+                    std::string s1 = mp.to_string() + "\n";
+                    std::string s2 = board.getInfo(mp);
+                    info.setString(s1+s2);
                     break;
                 }
                 case sf::Event::MouseButtonPressed:{
+                    auto mousePos = win.mapPixelToCoords(sf::Mouse::getPosition(win));
                     if(e.mouseButton.button == sf::Mouse::Left){
-                        auto clickPos = win.mapPixelToCoords(sf::Mouse::getPosition(win));
-                        auto clickedCell = board.getCell(clickPos);
-                        std::cout << "clicked cell: " << clickedCell.x << clickedCell.y << std::endl;
-                        if(selectedCell.x == -1){
-                            possibleMoves = board.getPossibleMovements(clickedCell.x, clickedCell.y, false);
-                            std::cout << "possible movements: " << possibleMoves.size() << std::endl;
-                            if(possibleMoves.size() > 0){
-                                selectedCell = clickedCell;
-                                board.mark(selectedCell.x, selectedCell.y, sf::Color::White);
-                                for(auto cell : possibleMoves){
-                                    auto col = board.empty(cell.x, cell.y) ? sf::Color::Blue : sf::Color::Green;
-                                    board.mark(cell.x, cell.y, col);
+                        if(!firstClick.validar()){
+                            Posicion click = board.coord2pos(mousePos);
+                            auto p = board.piezaEn(click);
+                            auto pm = board.posiblesMovimientos(p);
+                            if(p != nullptr && p->equipo == turno){
+                                firstClick.r = click.r; firstClick.c = click.c;
+                                board.marcar(firstClick, sf::Color::Blue);
+                                for(auto m : pm){
+                                    sf::Color c = 
+                                        board.piezaEn(m.destino) == nullptr ?
+                                            sf::Color::White : 
+                                            sf::Color::Red ;
+                                    board.marcar(m.destino, c);
                                 }
                             }
-                        }else if(clickedCell.x > -1 && clickedCell.y > -1){
-                            int i=0;
-                            bool found = false;
-                            while(i < possibleMoves.size() && !found){
-                                found = possibleMoves[i] == clickedCell;
-                                i++;
+                        }else{
+                            Movimiento m(firstClick, board.coord2pos(mousePos));
+                            if(board.probar(m, turno)){
+                                turno = turno == BLANCAS ? NEGRAS : BLANCAS;
+                                info_turno.setString("TURNO: "+nombreEquipo.at(turno));
+                            }else{
+                                l_avisos.avisar("Movimiento no valido");
                             }
-                            if(found){
-                                board.move(selectedCell.x, selectedCell.y, clickedCell.x, clickedCell.y);
+                            if(board.jaque(turno)){
+                                l_avisos.avisar(nombreEquipo.at(turno) + " EN JAQUE");
                             }
-                            possibleMoves.clear();
-                            selectedCell.x = -1; selectedCell.y = -1;
-                            board.resetMarks();
+                            firstClick.r=-1;firstClick.c=-1;
+                            board.borrarMarcas();
                         }
                     }
                     break;
@@ -113,9 +166,14 @@ int main(int argc, char **argv){
         
         unsigned dt = clock.restart().asMilliseconds();
         
+        avisos.setString(l_avisos.to_string());
+        l_avisos.update(dt);
+        
         win.clear();
         win.setView(viewInfo);
+        win.draw(info_turno);
         win.draw(info);
+        win.draw(avisos);
         win.setView(view);
         win.draw(board);
         win.display();

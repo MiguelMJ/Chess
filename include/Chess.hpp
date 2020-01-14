@@ -1,46 +1,122 @@
 #ifndef __CHESS_HPP__
 #define __CHESS_HPP__
 
-#include "Board.hpp"
-#include "util.hpp"
+#include <SFML/Graphics.hpp>
 #include <SFML/Window.hpp>
 #include <iostream>
 #include <sstream>
 #include <map>
-#include <unordered_set>
+#include <memory>
+// #include <unordered_set>
+#include <forward_list>
 
-namespace mtb{
-typedef enum {PEON, TORRE, CABALLO, ALFIL, REY, REINA} TipoChess;
-extern const std::map<TipoChess, std::string> nameTipoChess;
-class Pieza: public sf::Drawable, public sf::Transformable{
-    public:
-        static sf::Texture tex;
-        bool blancas;
-        TipoChess tipo;
-        Drawable* icon;
-        Pieza(TipoChess t, bool b, int size);
-        void draw(sf::RenderTarget& target, sf::RenderStates states)const;
+typedef enum {PEON, TORRE, CABALLO, ALFIL, REY, REINA} TipoPieza;
+typedef enum {BLANCAS, NEGRAS} Equipo;
+typedef struct Posicion_st{
+    unsigned r;
+    unsigned c;
+    std::string to_string();
+    void from_string(const std::string& str);
+    Posicion_st();
+    Posicion_st(const std::string& str);
+    Posicion_st(unsigned rr, unsigned cc);
+    bool validar();
+} Posicion;
+typedef struct Movimiento_st{
+    Posicion origen;
+    Posicion destino;
+    std::string to_string();
+    Movimiento_st(const std::string& str);
+    Movimiento_st(Posicion o, Posicion d);
+    bool validar();
+} Movimiento;
+typedef std::vector<Movimiento> ListaMovimientos;
+typedef struct Pieza_st_{
+    static sf::Texture texture;
+    sf::Sprite sprite;
+    TipoPieza tipo;
+    Equipo equipo;
+    Posicion posicion;
+    bool jugando;
+    std::string to_string();
+    Pieza_st_(TipoPieza t, Equipo e, Posicion p, bool j=true);
+} Pieza_st;
+typedef std::shared_ptr<Pieza_st> Pieza;
+typedef struct Evento_st{
+    Movimiento movimiento;
+    Pieza comida;
+    Evento_st(Movimiento m, Pieza p);
+} Evento;
+
+class TableroAjedrez: public sf::Drawable, public sf::Transformable{
+private:
+    std::forward_list<Evento> historial;
+    std::vector<Pieza> blancas;
+    std::vector<Pieza> negras;
+    Pieza tablero[8][8];
+    
+    std::shared_ptr<std::map<std::string, ListaMovimientos> > cacheMovimientos;
+    
+    // FUNCIONES AUXILIARES
+    bool insertarSiValido(ListaMovimientos &l, Movimiento m, bool& ha_comido_antes)const;
+    bool insertarSiValido(ListaMovimientos &l, Movimiento m)const;
+    bool soloProbar(Movimiento m, Equipo e);
+    
+    // PARA DIBUJAR
+    int lado;
+    sf::RectangleShape celdas[64];
+    std::vector<sf::RectangleShape> marcas;
+    void draw(sf::RenderTarget& target, sf::RenderStates states)const;
+    void situarSprites();
+public:
+    TableroAjedrez(int size=10);
+    void mover(Movimiento m);
+    void deshacer();
+    bool probar(Movimiento m, Equipo e);
+    
+    void poner(Posicion p, Pieza f);
+    Pieza piezaEn(Posicion p)const;
+    
+    ListaMovimientos posiblesMovimientos (Pieza p)const;
+    ListaMovimientos posiblesMovimientos (Equipo e)const;
+    
+    bool jaque(Equipo e)const;
+    bool jaquemate(Equipo e);
+    
+    std::string getInfo(Posicion p)const;
+    Posicion coord2pos(sf::Vector2f coo);
+    
+    void marcar(Posicion p, sf::Color, float thickness=0.1);
+    void borrarMarcas();
+    
 };
-class Chess: public mtb::Board<8,8>{
-    private:
-        Pieza *game[8][8];
-        std::map<std::string, std::vector<sf::Vector2i>> cachedPossibleMoves;
-        void draw(sf::RenderTarget& target, sf::RenderStates states)const;
-    public:
-        Chess(int n=10);
-        void put(Pieza *pieza, unsigned r, unsigned c);
-        void reset();
-        void move(const std::string);
-        void move(unsigned r1, unsigned c1, unsigned r2, unsigned c2);
-        std::string getInfo(sf::Vector2i pos);
-        bool empty(unsigned r, unsigned c);
-        void appendIfValid(unsigned r, unsigned c, bool team, std::vector<sf::Vector2i>& v, bool &choca);
-        std::unordered_set<std::string> getPossibleMovements(bool equipo, bool pa=false);
-        std::vector<sf::Vector2i> getPossibleMovements(const sf::Vector2f& pos, bool pa=false);
-        std::vector<sf::Vector2i> getPossibleMovements(unsigned r, unsigned c, bool pa=false);
-        bool check(bool team);
-        bool checkmate(bool team);
+
+class Jugador{
+private:
+    std::unique_ptr<Movimiento> sigMov;
+public:
+    Equipo equipo;
+    virtual bool listo()=0;
+    Movimiento jugada();
 };
-}
+class JugadorHost : public Jugador{
+    virtual bool listo();
+};
+class JugadorCliente : public Jugador{
+    virtual bool listo();
+};
+class JugadorIA : public Jugador{
+    virtual bool listo();
+};
+
+class Juego{
+private:
+    unsigned turno;
+    std::shared_ptr<Jugador> jugador[2];
+    TableroAjedrez tablero;
+public:
+    Juego(int size=10, const std::string& textureFile="piezas.png");
+    void actualizar();
+};
 
 #endif

@@ -1,298 +1,534 @@
 #include "Chess.hpp"
 
-namespace mtb{
-    sf::Texture Pieza::tex;
-    const std::map<TipoChess, std::string> nameTipoChess = {
-        {PEON, "PEON"},
-        {TORRE, "TORRE"},
-        {CABALLO, "CABALLO"},
-        {ALFIL, "ALFIL"},
-        {REY, "REY"},
-        {REINA, "REINA"}
+std::string Posicion_st::to_string(){
+    if(validar()){
+        return std::to_string(r) + std::to_string(c);
+    }else{
+        return "";
+    }
+}
+void Posicion_st::from_string(const std::string& str){   
+    r = str[0] - '0';
+    c = str[1] - '0';
+}
+Posicion_st::Posicion_st(){
+    r=-1;c=-1;
+}
+Posicion_st::Posicion_st(const std::string& str){
+    from_string(str);
+}
+Posicion_st::Posicion_st(unsigned rr, unsigned cc){
+    r = rr;
+    c = cc;
+}
+bool Posicion_st::validar(){
+    return r < 8 && c < 8;
+}
+std::string Movimiento_st::to_string(){
+    return origen.to_string() + destino.to_string();
+}
+Movimiento_st::Movimiento_st(const std::string& str):
+    origen(str.substr(0,2)), 
+    destino(str.substr(2,2)) {}
+Movimiento_st::Movimiento_st(Posicion o, Posicion d):
+    origen(o.r, o.c),
+    destino(d.r, d.c)
+    {}
+bool Movimiento_st::validar(){
+    return origen.validar() && destino.validar();
+}
+sf::Texture Pieza_st::texture;
+std::string Pieza_st::to_string(){
+    static const std::map<TipoPieza, std::string> nombreTipo = {
+        {PEON,"PEON"},
+        {TORRE,"TORRE"},
+        {CABALLO,"CABALLO"},
+        {ALFIL,"ALFIL"},
+        {REINA,"REINA"},
+        {REY,"REY"}
     };
+    static const std::map<Equipo, std::string> nombreEquipo = {
+        {BLANCAS,"BLANCAS"},
+        {NEGRAS,"NEGRAS"}
+    };
+    return nombreTipo.at(tipo) + " " + nombreEquipo.at(equipo);
+}
+
+Pieza_st::Pieza_st_(TipoPieza t, Equipo e, Posicion p, bool j):
+    posicion(p.r, p.c)
+    {
+    tipo = t;
+    equipo = e;
+    jugando=j;
+    unsigned top, left;
+    auto texSize = texture.getSize();
+    top = equipo == BLANCAS ? 0 : texSize.y/2;
+    switch(tipo){
+        case PEON:
+            left = 5;
+            break;
+        case TORRE:
+            left = 4;
+            break;
+        case CABALLO:
+            left = 3;
+            break;
+        case ALFIL:
+            left = 2;
+            break;
+        case REINA:
+            left = 1;
+            break;
+        case REY:
+            left = 0;
+            break;
+    }
+    int w = texSize.x/6;
+    left *= w;
+    sprite.setTexture(texture);
+    sprite.setTextureRect(sf::IntRect(left,top,texSize.x/6,texSize.y/2));
+    // std::cout << "Creada ficha: " << to_string() << std::endl;
+}
+Evento::Evento_st(Movimiento m, Pieza p):
+    movimiento(m),
+    comida(p){}
+bool TableroAjedrez::insertarSiValido(ListaMovimientos &l, Movimiento m)const{
+    bool dummy=false;
+    return insertarSiValido(l, m, dummy);
+}
+bool TableroAjedrez::insertarSiValido(ListaMovimientos &l, Movimiento m, bool& ha_comido_antes)const{
+    bool valido = false;
+    if(m.validar() && !ha_comido_antes){
+        Pieza p = piezaEn(m.origen);
+        Pieza d = piezaEn(m.destino);
+        bool come = p != nullptr && 
+                    d != nullptr && 
+                    d->equipo != p->equipo;
+        if(come){
+            std::cout << p->to_string() << " come " << d->to_string() << std::endl;
+        }
+        valido = p != nullptr && (d == nullptr || come);
+        ha_comido_antes = ha_comido_antes || come;
+        if(valido){
+            l.push_back(m);
+        }
+    }
+    return valido;
+}
+
+void TableroAjedrez::draw(sf::RenderTarget& target, sf::RenderStates states)const{
+    states.transform *= getTransform();
+    for(int i=0; i < 64; i++){
+        target.draw(celdas[i], states);
+    }
+    for(auto p : blancas){
+        if(p->jugando){
+            target.draw(p->sprite, states);   
+        }
+    }
+    for(auto p : negras){
+        if(p->jugando){
+            target.draw(p->sprite, states);   
+        }
+    }
+    for(auto m : marcas){
+        target.draw(m, states);
+    }
+}
+void TableroAjedrez::situarSprites(){
+    std::vector<std::vector<Pieza>*> eq = {&blancas, &negras};
+    for(auto pl : eq){
+        for(auto p : *pl){
+            poner(p->posicion, p);
+            auto y = (float)lado * p->posicion.r + lado*0.1;
+            auto x = (float)lado * p->posicion.c + lado*0.1;
+            p->sprite.setPosition(x,y);
+            auto lb = p->sprite.getLocalBounds();
+            sf::Vector2f sc(lb.width, lb.height);
+            float tam = (float)lado*0.8;
+            sf::Vector2f fac(tam/sc.x, tam/sc.y);
+            p->sprite.scale(fac);
+        }
+    }
+}
+
+TableroAjedrez::TableroAjedrez(int size):
+    cacheMovimientos(new std::map<std::string, ListaMovimientos>)
+    {
+    blancas.push_back(Pieza(new Pieza_st(PEON, BLANCAS, Posicion(1,0))));
+    blancas.push_back(Pieza(new Pieza_st(PEON, BLANCAS, Posicion(1,1))));
+    blancas.push_back(Pieza(new Pieza_st(PEON, BLANCAS, Posicion(1,2))));
+    blancas.push_back(Pieza(new Pieza_st(PEON, BLANCAS, Posicion(1,3))));
+    blancas.push_back(Pieza(new Pieza_st(PEON, BLANCAS, Posicion(1,4))));
+    blancas.push_back(Pieza(new Pieza_st(PEON, BLANCAS, Posicion(1,5))));
+    blancas.push_back(Pieza(new Pieza_st(PEON, BLANCAS, Posicion(1,6))));
+    blancas.push_back(Pieza(new Pieza_st(PEON, BLANCAS, Posicion(1,7))));
+    blancas.push_back(Pieza(new Pieza_st(TORRE, BLANCAS, Posicion(0,0))));
+    blancas.push_back(Pieza(new Pieza_st(TORRE, BLANCAS, Posicion(0,7))));
+    blancas.push_back(Pieza(new Pieza_st(CABALLO, BLANCAS, Posicion(0,1))));
+    blancas.push_back(Pieza(new Pieza_st(CABALLO, BLANCAS, Posicion(0,6))));
+    blancas.push_back(Pieza(new Pieza_st(ALFIL, BLANCAS, Posicion(0,2))));
+    blancas.push_back(Pieza(new Pieza_st(ALFIL, BLANCAS, Posicion(0,5))));
+    blancas.push_back(Pieza(new Pieza_st(REINA, BLANCAS, Posicion(0,4))));
+    blancas.push_back(Pieza(new Pieza_st(REY, BLANCAS, Posicion(0,3))));
     
-    Pieza::Pieza(TipoChess t, bool b, int size){
-        tipo=t;
-        blancas=b;
-        int pos;
-        switch(tipo){
+    negras.push_back(Pieza(new Pieza_st(PEON, NEGRAS, Posicion(6,0))));
+    negras.push_back(Pieza(new Pieza_st(PEON, NEGRAS, Posicion(6,1))));
+    negras.push_back(Pieza(new Pieza_st(PEON, NEGRAS, Posicion(6,2))));
+    negras.push_back(Pieza(new Pieza_st(PEON, NEGRAS, Posicion(6,3))));
+    negras.push_back(Pieza(new Pieza_st(PEON, NEGRAS, Posicion(6,4))));
+    negras.push_back(Pieza(new Pieza_st(PEON, NEGRAS, Posicion(6,5))));
+    negras.push_back(Pieza(new Pieza_st(PEON, NEGRAS, Posicion(6,6))));
+    negras.push_back(Pieza(new Pieza_st(PEON, NEGRAS, Posicion(6,7))));
+    negras.push_back(Pieza(new Pieza_st(TORRE, NEGRAS, Posicion(7,0))));
+    negras.push_back(Pieza(new Pieza_st(TORRE, NEGRAS, Posicion(7,7))));
+    negras.push_back(Pieza(new Pieza_st(CABALLO, NEGRAS, Posicion(7,1))));
+    negras.push_back(Pieza(new Pieza_st(CABALLO, NEGRAS, Posicion(7,6))));
+    negras.push_back(Pieza(new Pieza_st(ALFIL, NEGRAS, Posicion(7,2))));
+    negras.push_back(Pieza(new Pieza_st(ALFIL, NEGRAS, Posicion(7,5))));
+    negras.push_back(Pieza(new Pieza_st(REINA, NEGRAS, Posicion(7,3))));
+    negras.push_back(Pieza(new Pieza_st(REY, NEGRAS, Posicion(7,4))));
+    
+    lado = size;
+    situarSprites();
+    
+    sf::Color color1(204, 102, 0);
+    sf::Color color2(255, 204, 102);
+    for(int r = 0; r < 8; r++){
+        for(int c = 0; c < 8; c++){
+            sf::RectangleShape celda(sf::Vector2f(lado,lado));
+            celda.setPosition(getPosition()+sf::Vector2f(lado*r,lado*c));
+            celda.setFillColor(
+                (r+c) % 2 == 0 ?
+                color1 : color2
+            );
+            celdas[r*8+c] = celda;
+        }
+    }
+}
+
+void TableroAjedrez::mover(Movimiento m){
+    Evento e(m, piezaEn(m.destino));
+    if(e.comida != nullptr){
+        e.comida->jugando = false;
+    }
+    
+    auto p = piezaEn(m.origen);
+    poner(m.origen, nullptr);
+    poner(m.destino, p);
+    p->posicion = m.destino;
+    /*
+    int dx = lado * (m.destino.c - m.origen.c),
+             dy = lado * (m.destino.r - m.origen.r);
+    p->sprite.move(dx, dy);
+    */
+    cacheMovimientos->clear();
+    std::cout << "Cache limpiada" << std::endl;
+    historial.push_front(e);
+}
+void TableroAjedrez::deshacer(){
+    if(!historial.empty()){
+        auto e = historial.front();
+        poner(e.movimiento.origen, piezaEn(e.movimiento.destino));
+        poner(e.movimiento.destino, e.comida);
+        if(e.comida != nullptr){
+            e.comida->jugando = true;
+        }
+            
+        historial.pop_front();
+        cacheMovimientos->clear();
+    }
+}
+bool TableroAjedrez::soloProbar(Movimiento m, Equipo e){
+    bool ret = false;
+    if(m.validar()){
+        mover(m);
+        ret = jaque(e);
+        deshacer();
+    }
+    return ret;
+}
+bool TableroAjedrez::probar(Movimiento m, Equipo e){
+    bool contemplado = false;
+    bool produceJaque = false;
+    if(m.validar()){
+        auto p = piezaEn(m.origen);
+        if(p != nullptr && p->equipo == e){
+            auto pm = posiblesMovimientos(piezaEn(m.origen));
+            auto it = pm.begin();
+            while(!contemplado && it != pm.end()){
+                contemplado = it->destino.r == m.destino.r &&
+                            it->destino.c == m.destino.c;
+                it++;
+            }
+        }
+    }
+    if(contemplado){
+        auto viejaCache = cacheMovimientos;
+        cacheMovimientos.reset(new std::map<std::string, ListaMovimientos>);
+        produceJaque = soloProbar(m, e);
+        if(!produceJaque){ 
+            mover(m);
+        }else{
+            cacheMovimientos = viejaCache;
+            std::cout << "cache restituida" << std::endl;
+        }
+    }
+    return contemplado && !produceJaque;
+}
+
+void TableroAjedrez::poner(Posicion p, Pieza f){
+    tablero[p.r][p.c] = f;
+    if(f != nullptr){
+        auto pos = getPosition() + sf::Vector2f(p.c * lado + lado*0.1 , p.r * lado + lado * 0.1);
+        f->sprite.setPosition(pos);
+    }
+}
+
+Pieza TableroAjedrez::piezaEn(Posicion p)const{
+    return tablero[p.r][p.c];
+}
+
+ListaMovimientos TableroAjedrez::posiblesMovimientos(Pieza p)const{
+    ListaMovimientos ret;
+    if(p != nullptr){
+        Posicion pos = p->posicion;
+        auto guardado = cacheMovimientos->find(pos.to_string());
+        if( guardado != cacheMovimientos->end()){
+            return guardado->second;
+        }
+        Posicion dest;
+        Pieza paux;
+        bool comio;
+        switch(p->tipo){
             case PEON:
-                pos=5;
-                break;
-            case TORRE:
-                pos=4;
-                break;
-            case CABALLO:
-                pos=3;
-                break;
-            case ALFIL:
-                pos=2;
-                break;
-            case REY:
-                pos=0;
+                unsigned dr, start;
+                if(p->equipo == BLANCAS){
+                    start = 1;
+                    dr = 1;
+                }else{
+                    start = 6;
+                    dr = -1;
+                }
+                // normal move
+                dest.r = pos.r+dr; dest.c = pos.c;
+                if(piezaEn(dest) == nullptr){
+                    ret.push_back(Movimiento(pos, dest));
+                    // starting move
+                    dest.r += dr;
+                    if( pos.r == start && 
+                        piezaEn(dest) == nullptr){
+                        ret.push_back(Movimiento(pos, dest));
+                    }
+                    dest.r -= dr;
+                }
+                // attack
+                dest.r = pos.r + dr;
+                for(dest.c = pos.c+1; dest.c < pos.c-1; dest.c -= 2){
+                    paux = piezaEn(dest);
+                    if(paux != nullptr && paux->equipo != p->equipo){
+                        ret.push_back(Movimiento(pos, dest));
+                    }
+                }
                 break;
             case REINA:
-                pos=1;
+            case TORRE:
+                // arriba
+                dest.r = pos.r-1; dest.c = pos.c;
+                comio=false;
+                while(insertarSiValido(ret, Movimiento(pos,dest),comio)){
+                    dest.r--;
+                }
+                // abajo
+                dest.r = pos.r+1;
+                comio=false;
+                while(insertarSiValido(ret, Movimiento(pos,dest), comio)){
+                    dest.r++;
+                }
+                // izquierda
+                dest.r = pos.r; dest.c = pos.c-1;
+                comio=false;
+                while(insertarSiValido(ret, Movimiento(pos,dest), comio)){
+                    dest.c--;
+                }
+                // derecha
+                dest.c = pos.c+1;
+                comio=false;
+                while(insertarSiValido(ret, Movimiento(pos,dest), comio)){
+                    dest.c++;
+                }
+                if (p->tipo == TORRE){
+                    break;
+                }
+            case ALFIL:
+                // arriba izquierda
+                dest.r = pos.r-1; dest.c = pos.c-1;
+                comio=false;
+                while(insertarSiValido(ret, Movimiento(pos, dest), comio)){
+                    dest.r--;
+                    dest.c--;
+                }
+                // arriba derecha
+                dest.r = pos.r-1; dest.c = pos.c+1;
+                comio=false;
+                while(insertarSiValido(ret, Movimiento(pos, dest), comio)){
+                    dest.r--;
+                    dest.c++;
+                }
+                // abajo izquierda
+                dest.r = pos.r+1; dest.c = pos.c-1;
+                comio=false;
+                while(insertarSiValido(ret, Movimiento(pos, dest), comio)){
+                    dest.r++;
+                    dest.c--;
+                }
+                // abajo derecha
+                dest.r = pos.r+1; dest.c = pos.c+1;
+                comio=false;
+                while(insertarSiValido(ret, Movimiento(pos, dest), comio)){
+                    dest.r++;
+                    dest.c++;
+                }
+                break;
+            case CABALLO:
+                dest.r = pos.r+2; dest.c+1;
+                insertarSiValido(ret, Movimiento(pos, dest));
+                dest.r = pos.r+2; dest.c-1;
+                insertarSiValido(ret, Movimiento(pos, dest));
+                dest.r = pos.r-2; dest.c+1;
+                insertarSiValido(ret, Movimiento(pos, dest));
+                dest.r = pos.r-2; dest.c-1;
+                insertarSiValido(ret, Movimiento(pos, dest));
+                dest.r = pos.r+1; dest.c+2;
+                insertarSiValido(ret, Movimiento(pos, dest));
+                dest.r = pos.r+1; dest.c-2;
+                insertarSiValido(ret, Movimiento(pos, dest));
+                dest.r = pos.r-1; dest.c+2;
+                insertarSiValido(ret, Movimiento(pos, dest));
+                dest.r = pos.r-1; dest.c-2;
+                insertarSiValido(ret, Movimiento(pos, dest));
+                break;
+            case REY:
+                dest.r = pos.r+1; dest.c = pos.c+1;
+                insertarSiValido(ret, Movimiento(pos, dest));
+                dest.r = pos.r+1; dest.c = pos.c;
+                insertarSiValido(ret, Movimiento(pos, dest));
+                dest.r = pos.r+1; dest.c = pos.c-1;
+                insertarSiValido(ret, Movimiento(pos, dest));
+                dest.r = pos.r; dest.c = pos.c+1;
+                insertarSiValido(ret, Movimiento(pos, dest));
+                dest.r = pos.r; dest.c = pos.c-1;
+                insertarSiValido(ret, Movimiento(pos, dest));
+                dest.r = pos.r-1; dest.c = pos.c+1;
+                insertarSiValido(ret, Movimiento(pos, dest));
+                dest.r = pos.r-1; dest.c = pos.c;
+                insertarSiValido(ret, Movimiento(pos, dest));
+                dest.r = pos.r-1; dest.c = pos.c-1;
+                insertarSiValido(ret, Movimiento(pos, dest));
                 break;
         }
-        auto texSize = tex.getSize();
-        int top = blancas ? 0 : texSize.y / 2;
-        int w = texSize.x / 6;
-        auto sprite = new sf::Sprite(tex, sf::IntRect(pos*w,top,w,texSize.y/2));
-        auto r = sprite->getLocalBounds();
-        sprite->scale(0.8*size/r.width,0.8*size/r.height);
-        icon = sprite;
+        (*cacheMovimientos)[pos.to_string()] = ret;
+        std::cout << "almacenado movimiento desde " << pos.to_string() << std::endl;
     }
-    void Pieza::draw(sf::RenderTarget& target, sf::RenderStates states)const{
-        states.transform *= getTransform();
-        target.draw(*icon, states);
+    return ret;
+}
+
+ListaMovimientos TableroAjedrez::posiblesMovimientos(Equipo e)const{
+    const std::vector<Pieza> &equipo = e == BLANCAS ? blancas : negras;
+    ListaMovimientos ret;
+    for(auto p : equipo){
+        if(p->jugando){
+            auto pm = posiblesMovimientos(p);
+            ret.insert(ret.end(),pm.begin(), pm.end());
+        }
     }
-    void Chess::draw(sf::RenderTarget& target, sf::RenderStates states)const{
-        states.transform *= getTransform();
-        Board::draw(target, states);
-        for(unsigned r = 0; r < 8; r++){
-            for(unsigned c = 0; c < 8; c++){
-                auto p = game[r][c];
-                if(p != NULL) p->draw(target,states);
+    return ret;
+}
+
+bool TableroAjedrez::jaque(Equipo e)const{
+    bool j = false;
+    const std::vector<Pieza> *equipo, *contrincante;
+    // determinamos los equipos
+    if(e == BLANCAS){
+        equipo = &blancas;
+        contrincante = &negras;
+    }else{
+        equipo = &negras;
+        contrincante = &blancas;
+    }
+    // encontramos la posicion del rey
+    Posicion reypos;
+    for(auto p : *equipo){
+        if(p->tipo == REY){
+            reypos = p->posicion;
+            break;
+        }
+    }
+    // comprobamos si es atacable
+    for(auto p: *contrincante){
+        if(p->jugando){
+            auto pm = posiblesMovimientos(p);
+            for(auto mov : pm){
+                j = mov.destino.r == reypos.r &&
+                    mov.destino.c == reypos.c;
+                if(j) break;
             }
+            if(j) break;
         }
     }
-    Chess::Chess(int n) : mtb::Board<8,8>(n){
-        sf::Color color1(255, 206, 158);
-        sf::Color color2(209, 139, 71);
-        for(int r=0; r < 8; r++){
-            for(int c=0; c < 8; c++){
-                if((r + c) %2 == 0){
-                    cellColor(r,c,color1);
-                }else{
-                    cellColor(r,c,color2);   
-                }
-                borderColor(r,c,sf::Color::Black);
-                game[r][c] = NULL;
-            }
-        }
-        reset();
+    return j;
+}
+bool TableroAjedrez::jaquemate(Equipo e){
+    bool jm=true;
+    Equipo contrincante = e == BLANCAS ? NEGRAS : BLANCAS;
+    auto pm = posiblesMovimientos(contrincante);
+    auto mov = pm.begin();
+    while(mov != pm.end() && jm){
+        jm = !soloProbar(*mov, e);
+        mov++;
     }
-    void Chess::put(Pieza *pieza, unsigned r, unsigned c){
-            if(pieza){
-                if(game[r][c] != NULL){
-                    delete game[r][c];
-                }
-                game[r][c] = pieza;
-                pieza->setPosition(getPosition() + sf::Vector2f(size*(c + 0.1),size*(r + 0.1)));
-            }
-        }
-    void Chess::reset(){
-        for(int r = 0; r < 8; r++){
-            for(int c = 0; c < 8; c++){
-                if(game[r][c] != NULL) delete game[r][c];
-            }
-        }
-        for(int i=0; i<8; i++){
-            put(new Pieza(PEON, true, size),1,i);
-            put(new Pieza(PEON, false, size),6,i);
-        }
-        put(new Pieza(TORRE, true, size), 0, 0);
-        put(new Pieza(TORRE, false, size), 7, 0);
-        put(new Pieza(TORRE, true, size), 0, 7);
-        put(new Pieza(TORRE, false, size), 7, 7);
-        put(new Pieza(CABALLO, true, size), 0, 1);
-        put(new Pieza(CABALLO, false, size), 7, 1);
-        put(new Pieza(CABALLO, true, size), 0, 6);
-        put(new Pieza(CABALLO, false, size), 7, 6);
-        put(new Pieza(ALFIL, true, size), 0, 2);
-        put(new Pieza(ALFIL, false, size), 7, 2);
-        put(new Pieza(ALFIL, true, size), 0, 5);
-        put(new Pieza(ALFIL, false, size), 7, 5);
-        put(new Pieza(REINA, true, size), 0, 3);
-        put(new Pieza(REINA, false, size), 7, 4);
-        put(new Pieza(REY, true, size), 0, 4);
-        put(new Pieza(REY, false, size), 7, 3);
-    }
-    void Chess::move(const std::string& mov){
-        int r1 = mov[0] - '0';
-        int c1 = mov[1] - '0';
-        int r2 = mov[2] - '0';
-        int c2 = mov[3] - '0';
-        move(r1,c1,r2,c2);
-    }
-    void Chess::move(unsigned r1, unsigned c1, unsigned r2, unsigned c2){
-        if(r1 != r2 || c1 != c2){
-            put(game[r1][c1],r2,c2);
-            game[r1][c1] = NULL;
-        }
-        cachedPossibleMoves.clear();
-    }
-    std::string Chess::getInfo(sf::Vector2i pos){
-        std::stringstream ret;
-        if(pos.x < 8 && pos.y < 8){
-            unsigned r = pos.x, c = pos.y;
-            ret << "Fila:    " << r+1 << std::endl;
-            ret << "Columna: " << c+1 << std::endl;
-            if(game[r][c] == NULL){
-                ret << "vacio";
-            }else{
-                ret << nameTipoChess.at((game[r][c]->tipo)) << (game[r][c]->blancas ? " BLANCAS" : " NEGRAS" ) << std::endl;
-            }
-        }
-        return ret.str();
-    }
-    bool Chess::empty(unsigned r, unsigned c){
-        return game[r][c] == NULL;
-    }
-    void Chess::appendIfValid(unsigned r, unsigned c, bool team, std::vector<sf::Vector2i>& v, bool &choca){
-        if(r < 8 && c < 8){
-            choca = game[r][c] != NULL;
-            if(choca && game[r][c]->blancas != team || ! choca){
-                v.push_back(sf::Vector2i(r,c));
-            }
+    return jm;
+}
+
+std::string TableroAjedrez::getInfo(Posicion pos)const{
+    std::string ret;
+    if(pos.validar()){
+        auto p = piezaEn(pos);
+        if(p != nullptr){
+            ret = p->to_string();
+        }else{
+            ret = "-";
         }
     }
-    std::unordered_set<std::string> Chess::getPossibleMovements(bool equipo, bool pa){
-        std::unordered_set<std::string> ret;
-        for(int r=0; r < 8; r++){
-            for(int c=0; c < 8; c++){
-                auto p = game[r][c];
-                if(p != NULL && p->blancas == equipo){
-                    auto pmov = getPossibleMovements(r,c, pa);
-                    for(auto mov : pmov){
-                        ret.insert(std::to_string(mov.x)+std::to_string(mov.y));
-                    }
-                }
-            }
-        }
-        return ret;
+    return ret;
+}
+Posicion TableroAjedrez::coord2pos(sf::Vector2f coo){
+    Posicion ret;
+    sf::Vector2f relPos = coo - getPosition();
+    ret.r = relPos.y / lado;
+    ret.c = relPos.x / lado;
+    if(!ret.validar()){
+        ret.r = -1; ret.c = -1;
     }
-    std::vector<sf::Vector2i> Chess::getPossibleMovements(const sf::Vector2f& pos, bool pa){
-        auto rc = getCell(pos);
-        return getPossibleMovements(rc.x,rc.y, pa);
+    return ret;
+}
+
+void TableroAjedrez::marcar(Posicion p, sf::Color c, float thickness){
+    if(p.validar()){
+        float grosor = (float)lado * thickness;
+        float top = p.r * lado + grosor;
+        float left = p.c * lado + grosor;
+        float height = lado - 2 * grosor;
+        float width = lado - 2 * grosor;
+        sf::RectangleShape rect(sf::Vector2f(width, height));
+        rect.setPosition(getPosition() + sf::Vector2f(left, top));
+        rect.setFillColor(sf::Color(0,0,0,0));
+        rect.setOutlineColor(c);
+        rect.setOutlineThickness(grosor);
+        marcas.push_back(rect);
     }
-    std::vector<sf::Vector2i> Chess::getPossibleMovements(unsigned r, unsigned c, bool potentialAttacks){
-        std::string cellID = std::to_string(r) + std::to_string(c);
-        bool excepcionPeon = game[r][c]!=NULL && game[r][c]->tipo==PEON && potentialAttacks;
-        if(!excepcionPeon && cachedPossibleMoves.find(cellID) != cachedPossibleMoves.end()){
-            std::cout << "Using cached movements" << std::endl;
-            return cachedPossibleMoves[cellID];
-        }
-        std::cout << "Calculating movements" << std::endl;
-        std::vector<sf::Vector2i> ret;
-        if(r < 8 && c < 8 && game[r][c] != NULL){
-            auto pieza = game[r][c];
-            bool team = pieza->blancas;
-            bool eats = false;
-            switch(pieza->tipo){
-                case PEON:
-                {
-                    int mov = team ? 1 : -1;
-                    int srow = team ? 1 : 6;
-                    int nrow = r + mov;
-                    if(nrow < 8 && nrow > -1){
-                        if(r == srow && game[nrow + mov][c] == NULL && !potentialAttacks){
-                            ret.push_back(sf::Vector2i(nrow+mov,c));
-                        }
-                        if(game[nrow][c] == NULL && !potentialAttacks){
-                            ret.push_back(sf::Vector2i(nrow,c));
-                        }
-                        if(c < 7 && (game[nrow][c+1] != NULL && game[nrow][c+1]->blancas != team || potentialAttacks)){
-                            ret.push_back(sf::Vector2i(nrow,c+1));
-                        }
-                        if(c > 0 && (game[nrow][c-1] != NULL && game[nrow][c-1]->blancas != team || potentialAttacks)){
-                            ret.push_back(sf::Vector2i(nrow,c-1));
-                        }
-                    }
-                    break;
-                }
-                case REINA:
-                case TORRE:
-                {
-                    for(int dr=r+1; dr < 8 && !eats; dr++){ // hacia abajo
-                        appendIfValid(dr, c, team, ret, eats);
-                    }
-                    eats = false;
-                    for(int dr=r-1; dr > -1 && !eats; dr--){ // hacia arriba
-                        appendIfValid(dr, c, team, ret, eats);
-                    }
-                    eats = false;
-                    for(int dc=c+1; dc < 8 && !eats; dc++){ // hacia derecha
-                        appendIfValid(r, dc, team, ret, eats);
-                    }
-                    eats = false;
-                    for(int dc=c-1; dc > -1 && !eats; dc--){ // hacia izquierda
-                        appendIfValid(r, dc, team, ret, eats);
-                    }
-                }
-                if(pieza->tipo == TORRE) break;
-                case ALFIL:
-                {
-                    eats = false;
-                    for(int dr=r+1, dc=c+1; dr<8 && dc<8 && !eats; dr++, dc++){ // hacia abajo derecha
-                        appendIfValid(dr, dc, team, ret, eats);
-                    }
-                    eats = false;
-                    for(int dr=r-1, dc=c+1; dr>-1 && dc<8 && !eats; dr--, dc++){ // hacia arriba derecha
-                        appendIfValid(dr, dc, team, ret, eats);
-                    }
-                    eats = false;
-                    for(int dr=r+1, dc=c-1; dr<8 && dc>-1 && !eats; dr++, dc--){ // hacia abajo izquierda
-                        appendIfValid(dr, dc, team, ret, eats);
-                    }
-                    eats = false;
-                    for(int dr=r-1, dc=c-1; dr>-1 && dc>-1 && !eats; dr--, dc--){ // hacia arriba izquierda
-                        appendIfValid(dr, dc, team, ret, eats);
-                    }
-                    break;
-                }
-                case CABALLO:
-                {
-                    appendIfValid(r+2, c+1, team, ret, eats);
-                    appendIfValid(r+2, c-1, team, ret, eats);
-                    appendIfValid(r-2, c+1, team, ret, eats);
-                    appendIfValid(r-2, c-1, team, ret, eats);
-                    appendIfValid(r+1, c+2, team, ret, eats);
-                    appendIfValid(r+1, c-2, team, ret, eats);
-                    appendIfValid(r-1, c+2, team, ret, eats);
-                    appendIfValid(r-1, c-2, team, ret, eats);
-                    break;
-                }
-                case REY:
-                    appendIfValid(r-1, c-1, team, ret, eats);
-                    appendIfValid(r-1, c, team, ret, eats);
-                    appendIfValid(r-1, c+1, team, ret, eats);
-                    appendIfValid(r, c-1, team, ret, eats);
-                    appendIfValid(r, c+1, team, ret, eats);
-                    appendIfValid(r+1, c-1, team, ret, eats);
-                    appendIfValid(r+1, c, team, ret, eats);
-                    appendIfValid(r+1, c+1, team, ret, eats);
-                    break;
-            }
-        }
-        if(!excepcionPeon)
-            cachedPossibleMoves[cellID] = ret;
-        return ret;
-    }
-    bool Chess::check(bool team){
-        auto vulnerable = getPossibleMovements(!team,true);
-        std::string king;
-        for(int r = 0; r < 8; r++){
-            for(int c = 0; c < 8; c++){
-                auto p = game[r][c];
-                if(p!=NULL && p->tipo==REY && p->blancas==team){
-                    king = std::to_string(r) + std::to_string(c);
-                }
-            }
-        }
-        return vulnerable.find(king) != vulnerable.end();
-    }
-    bool Chess::checkmate(bool team){
-        // para cada posible movimiento de team
-        auto pm = getPossibleMovements(team);
-        for(){
-            // probarlo
-            Pieza* temp = 
-            // si la casilla del rey no es atacable
-                // return GOODTOGO
-            // deshacerlo
-            // 
-        }
-    }
+}
+
+void TableroAjedrez::borrarMarcas(){
+    marcas.clear();
 }
