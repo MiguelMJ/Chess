@@ -1,2 +1,2 @@
 #!/bin/bash
-g++ -g -std=c++11 -I../include ../src/*.cpp ../main.cpp -o MTB -lsfml-graphics -lsfml-window -lsfml-audio -lsfml-system
+g++ -g -std=c++11 -I../include ../src/*.cpp ../main.cpp -o MTB -lsfml-graphics -lsfml-window -lsfml-audio -lsfml-system -lsfml-network

@@ -42,177 +42,67 @@ typedef struct {
 } ListaAvisos;
 
 int main(int argc, char **argv){
-    const std::map<Equipo, std::string> nombreEquipo = {
-        {BLANCAS, "BLANCAS"},
-        {NEGRAS, "NEGRAS"}
-    };
-    // constants
+    // pixels per cell
     const unsigned n = 30;
-    // window and view
+    // setup window
     sf::RenderWindow win;
-    std::cout << "Configurando ventana" << std::endl;
     sf::ContextSettings settings;
     settings.antialiasingLevel = 8;
-
     win.create(sf::VideoMode(800,600), "Chess",sf::Style::Titlebar | sf::Style::Close, settings);
     win.setFramerateLimit(45);
-    
+    // setup views
     sf::View view(sf::FloatRect(-1,-1,8*n+2,8*n+2));
     sf::View viewInfo(sf::FloatRect(1000,0,220,800));
-    
-    
     view.setViewport(sf::FloatRect(0,0,600.0/800,1));
     viewInfo.setViewport(sf::FloatRect(600.0/800,0,200.0/800,1));
-    
-    
-    // Pieces
-    std::cout << "Cargando textura de piezas" << std::endl;
-    if(!Pieza_st::texture.loadFromFile("piezas2.png")){
-        std::cerr << "No se pudo cargar las texturas" << std::endl;
-        exit(1);
-    }
-    Pieza_st::texture.setSmooth(true);
-    // Board
-    std::cout << "Construyendo tablero" << std::endl;
-    TableroAjedrez board(n);
-    // Clock
+    // clock and fonts
     sf::Clock clock;
-    // Text
     sf::Font font;
-    std::cout << "Cargando fuentes" << std::endl;
-    if(!font.loadFromFile("fonts/GOTHIC.TTF")){
+    if(!font.loadFromFile("assets/monoid.normal.ttf")){
         exit(1);
     }
-    sf::Text info_turno;
-    info_turno.setString("TURNO: BLANCAS");
-    info_turno.setFont(font);
-    info_turno.setPosition(1010,10);
-    info_turno.setCharacterSize(24);
-    
     sf::Text info;
     info.setFont(font);
-    info.setPosition(1010,40);
-    info.setCharacterSize(24);
+    info.setPosition(1010,10);
+    info.setCharacterSize(20);
     
     ListaAvisos l_avisos;
     sf::Text avisos;
     avisos.setFont(font);
     avisos.setPosition(1010,750);
     avisos.setCharacterSize(16);
-    
-    std::cout << "Iniciando bucle" << std::endl;
-    // Equipo turno = BLANCAS;
-    Posicion firstClick;
-    
-    JugadorCliente *cliente = new JugadorCliente;
-    cliente->equipo = BLANCAS;
-    auto ia = new JugadorIA;
-    ia->tablero = &board;
-    Jugador *contrincante = ia;
-    contrincante->equipo = NEGRAS;
-    Jugador *turno = cliente;
+    // main body
+    Juego juego(win, view, n);
     while(win.isOpen()){
-        // std::cout << ".";
         sf::Event e;
         // Manejo de eventos
         while(win.pollEvent(e)){
             switch(e.type){
-                case sf::Event::Closed:{
+                case sf::Event::Closed:
                     win.close();
                     break;
-                }
-                case sf::Event::KeyPressed:{
-                    if(e.key.code == sf::Keyboard::Enter){
-                        // 
-                    }
+                default:
+                    juego.manejar(e);
                     break;
-                }
-                case sf::Event::MouseMoved:{
-                    auto mousePos = win.mapPixelToCoords(sf::Mouse::getPosition(win));
-                    Posicion mp = board.coord2pos(mousePos);
-                    std::string s1 = mp.to_string() + "\n";
-                    std::string s2 = board.getInfo(mp);
-                    info.setString(s1+s2);
-                    break;
-                }
-                case sf::Event::MouseButtonPressed:{
-                    if(turno == cliente){
-                        auto mousePos = win.mapPixelToCoords(sf::Mouse::getPosition(win));
-                        if(e.mouseButton.button == sf::Mouse::Left){
-                            /*
-                             * PRIMER CLICK
-                             */
-                            if(!firstClick.validar()){
-                                Posicion click = board.coord2pos(mousePos);
-                                auto p = board.piezaEn(click);
-                                auto pm = board.posiblesMovimientos(p);
-                                if(p != nullptr && p->equipo == turno->equipo){
-                                    firstClick.r = click.r; firstClick.c = click.c;
-                                    board.marcar(firstClick, sf::Color::Blue);
-                                    for(auto m : pm){
-                                        sf::Color c = 
-                                            board.piezaEn(m.destino) == nullptr ?
-                                                sf::Color::White : 
-                                                sf::Color::Red ;
-                                        board.marcar(m.destino, c);
-                                    }
-                                }
-                            /*
-                             * SEGUNDO CLICK
-                             */
-                            }else{
-                                Movimiento m(firstClick, board.coord2pos(mousePos));
-                                if(board.probar(m, turno->equipo)){
-                                    cliente->preparar(m);
-                                    /*turno = turno == BLANCAS ? NEGRAS : BLANCAS;
-                                    info_turno.setString("TURNO: "+nombreEquipo.at(turno));*/
-                                    
-                                }else{
-                                    l_avisos.avisar("Movimiento no valido");
-                                }
-                                /*if(board.jaque(turno)){
-                                    l_avisos.avisar(nombreEquipo.at(turno) + " EN JAQUE");
-                                }*/
-                                firstClick.r=-1;firstClick.c=-1;
-                                board.borrarMarcas();
-                            }
-                        }
-                    }
-                    break;
-                }
             }
         }
         // fin del manejo de eventos
         
-        if(turno->listo()){
-            Movimiento j(turno->jugada());
-            board.mover(j);
-            turno = turno == cliente ? contrincante : cliente;
-            /*if(board.jaquemate(turno->equipo)){
-                l_avisos.avisar(nombreEquipo.at(turno->equipo)+" HAN PERDIDO");
-            }*/
-            if(board.jaque(turno->equipo)){
-                l_avisos.avisar(nombreEquipo.at(turno->equipo)+" EN JAQUE");
-            }
-            turno->notificar(j);
-        }
+        juego.actualizar();
         
-        //
         unsigned dt = clock.restart().asMilliseconds();
         
         avisos.setString(l_avisos.to_string());
         l_avisos.update(dt);
+        info.setString(juego.getInfo());
         
         win.clear();
         win.setView(viewInfo);
-        win.draw(info_turno);
         win.draw(info);
         win.draw(avisos);
         win.setView(view);
-        win.draw(board);
+        win.draw(*(juego.tablero));
         win.display();
     }
-    std::cout << "Movimientos calculados: " << board.calculatedAccesses << std::endl;
-    std::cout << "Movimientos recordados: " << board.cachedAccesses << std::endl;
     return 0;
 }

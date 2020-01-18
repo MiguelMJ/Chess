@@ -1,2 +1,2 @@
 #/bin/bash
-gdb -q -x debugspecs --args MTB
+gdb -q -x debugspecs --args MTB $*

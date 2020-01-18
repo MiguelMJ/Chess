@@ -3,6 +3,7 @@
 
 #include <SFML/Graphics.hpp>
 #include <SFML/Window.hpp>
+#include <SFML/Network.hpp>
 #include <iostream>
 #include <sstream>
 #include <map>
@@ -11,8 +12,11 @@
 #include <random>
 #include <forward_list>
 
+#define FUERA 9
+
 typedef enum {PEON, TORRE, CABALLO, ALFIL, REY, REINA} TipoPieza;
 typedef enum {BLANCAS, NEGRAS} Equipo;
+Equipo operator ! (Equipo e);
 typedef struct Posicion_st{
     unsigned r;
     unsigned c;
@@ -57,8 +61,6 @@ private:
     std::vector<Pieza> negras;
     Pieza tablero[8][8];
     
-    std::shared_ptr<std::map<std::string, ListaMovimientos> > cacheMovimientos;
-    
     // FUNCIONES AUXILIARES
     bool insertarSiValido(ListaMovimientos &l, Movimiento m, bool& ha_comido_antes);
     bool insertarSiValido(ListaMovimientos &l, Movimiento m);
@@ -88,11 +90,9 @@ public:
     std::string getInfo(Posicion p);
     Posicion coord2pos(sf::Vector2f coo);
     
+    void voltear();
     void marcar(Posicion p, sf::Color, float thickness=0.1);
     void borrarMarcas();
-    // for debug
-    int cachedAccesses;
-    int calculatedAccesses;
     
 };
 
@@ -112,25 +112,62 @@ public:
     void preparar(Movimiento m);
 };
 class JugadorOnline : public Jugador{
+private:    
+    sf::TcpSocket *socket;
+    sf::SocketSelector socket_sel;
 public:
+    JugadorOnline(sf::TcpSocket &s);
     virtual bool listo();
     virtual void notificar(Movimiento m);
 };
 class JugadorIA : public Jugador{
 public:
-    TableroAjedrez* tablero;
+    std::shared_ptr<TableroAjedrez> tablero;
     virtual bool listo();
     virtual void notificar(Movimiento m);
 };
 
+typedef enum {LOCAL, IA, ONLINE, HOST} Modo;
+typedef enum {MENU, JUEGO, ENTRADA, ESCUCHANDO} Estado; 
 class Juego{
 private:
-    unsigned turno;
-    std::shared_ptr<Jugador> jugador[2];
-    TableroAjedrez tablero;
+    std::shared_ptr<JugadorCliente> local;
+    std::shared_ptr<Jugador> contrincante;
+    std::shared_ptr<Jugador> turno;
+    Modo modo;
+    Estado estado;
+    void cambiaTurno(); 
+    void manejarEnJuego(sf::Event& e);
+    void manejarMenu(sf::Event& e);
+    void manejarEntrada(sf::Event& e);
+    void girar();
+    
+    Posicion firstClick;
+    
+    // manejadores
+    sf::RenderWindow *ventana;
+    sf::View *camara;
+    std::ostream *avisos;
+    sf::String info;
+    
+    
+    // para online
+    sf::TcpSocket socket;
+    std::string host;
+    sf::SocketSelector socket_sel;
+    sf::TcpListener listener;
+    unsigned short port;
 public:
-    Juego(int size=10, const std::string& textureFile="piezas.png");
+    std::shared_ptr<TableroAjedrez> tablero;
+    Juego(sf::RenderWindow& w, sf::View& c, int size=10, const std::string& textureFile="assets/piezas.png");
+    std::string getInfo();
     void actualizar();
+    void manejar(sf::Event& e);
+    void jugar(Modo m);
+    void terminar();
+    ~Juego();
 };
+
+
 
 #endif
