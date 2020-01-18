@@ -1,5 +1,7 @@
 # Chess
 
+![Chess](images/img1.png)
+
 #### Dependecies
 SFML 2.5
 
