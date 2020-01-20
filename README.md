@@ -3,7 +3,7 @@
 ![Chess](images/img1.png)
 
 #### Dependecies
-SFML 2.5
+SFML 2.5.1 dynamic libraries (and its own dependencies) are required to build the proyect.
 
 #### Compilation
 The script compile should do it, if you have the SFML libraries in your link path.
